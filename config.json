@@ -1,0 +1,110 @@
+{
+  "camera": {
+    "index": 1,
+    "width": 640,
+    "height": 480,
+    "fps": 30,
+    "exposure": 3,
+    "auto_exposure": 0.25,
+    "auto_wb": 0
+  },
+  "roi": {
+    "x": 40,
+    "y": 20,
+    "w": 560,
+    "h": 315
+  },
+  "colors": {
+    "idle": {
+      "name": "red",
+      "ranges": [
+        {
+          "lo": [
+            0,
+            120,
+            90
+          ],
+          "hi": [
+            8,
+            255,
+            255
+          ]
+        },
+        {
+          "lo": [
+            172,
+            120,
+            90
+          ],
+          "hi": [
+            179,
+            255,
+            255
+          ]
+        }
+      ]
+    },
+    "draw": {
+      "name": "green",
+      "ranges": [
+        {
+          "lo": [
+            10,
+            100,
+            90
+          ],
+          "hi": [
+            170,
+            255,
+            255
+          ]
+        }
+      ]
+    }
+  },
+  "blob": {
+    "min_area": 1,
+    "max_area": 8000,
+    "min_circularity": 0.0,
+    "gate_px": 150
+  },
+  "smoothing": {
+    "min_cutoff": 1.0,
+    "beta": 0.01,
+    "d_cutoff": 1.0
+  },
+  "stroke": {
+    "start_frames": 2,
+    "end_frames": 4,
+    "max_jump_px": 150,
+    "width": 10,
+    "color": "#1a1a1a",
+    "palette": [
+      "#1a1a1a",
+      "#e11d48",
+      "#f97316",
+      "#eab308",
+      "#22c55e",
+      "#06b6d4",
+      "#3b82f6",
+      "#8b5cf6",
+      "#ec4899"
+    ]
+  },
+  "canvas": {
+    "w": 1920,
+    "h": 1080,
+    "background": "#ffffff"
+  },
+  "session": {
+    "idle_timeout_s": 90,
+    "attract_fade_s": 20
+  },
+  "output": {
+    "dir": "./output",
+    "print_enabled": false
+  },
+  "ui": {
+    "language": "sl"
+  }
+}
