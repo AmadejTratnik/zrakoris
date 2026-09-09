@@ -69,20 +69,22 @@ def _camera_name(index: int) -> str:
     return f"Camera {index}"
 
 
-def _camera_produces_frames(cap: cv2.VideoCapture, attempts: int = 5) -> bool:
+def _camera_produces_frames(cap: cv2.VideoCapture, attempts: int = 20) -> bool:
     """True once ``cap`` actually delivers a frame, not just ``isOpened()``.
 
     Many UVC webcams expose a second, non-capture ``/dev/videoN`` node since
     Linux 4.16 (a metadata stream carrying per-frame timestamps/exposure, not
     video) alongside their real capture node. V4L2 happily opens that node —
     ``isOpened()`` reports true — but it can never produce a frame, and the
-    capture loop would spin forever reading nothing. A couple of warm-up reads
-    can legitimately fail on a slow-starting device, hence a few attempts.
+    capture loop would spin forever reading nothing. Laptop integrated cameras,
+    on the other hand, can take up to a second to hand over the first frame, so
+    give a genuinely slow starter time to wake before writing it off.
     """
     for _ in range(attempts):
         ok, frame = cap.read()
         if ok and frame is not None:
             return True
+        time.sleep(0.05)
     return False
 
 
@@ -107,11 +109,15 @@ def list_camera_devices(cfg: dict, max_probe: int = 8) -> list[tuple[int, str]]:
     """Enumerate camera indices for the operator's device dropdown.
 
     Call this before the capture thread starts (it does, in ``main.py``) — each
-    candidate is actually opened and read from, including the configured index,
-    which would otherwise contend with the capture thread for the device.
-    Indices that open but never deliver a frame (see
-    :func:`_camera_produces_frames`) are left out, so a UVC metadata node never
-    shows up as a selectable "camera".
+    candidate is actually opened, including the configured index, which would
+    otherwise contend with the capture thread for the device.
+
+    Every index that OpenCV can open is listed, even one that doesn't deliver a
+    frame during the quick probe: some webcams (notably laptop integrated
+    cameras) are slow to wake and only start streaming once selected for real,
+    and hiding them left the operator with no way to pick the right device. An
+    index that opened but stayed silent is still shown, tagged so the operator
+    knows it's the less likely pick (a UVC metadata node reads the same way).
     """
     current = int(cfg["camera"]["index"])
     backend = cv2.CAP_DSHOW if _IS_WIN else cv2.CAP_ANY
@@ -119,15 +125,16 @@ def list_camera_devices(cfg: dict, max_probe: int = 8) -> list[tuple[int, str]]:
     found: dict[int, str] = {}
     for i in candidates:
         cap = cv2.VideoCapture(i, backend)
-        ok = cap.isOpened() and _camera_produces_frames(cap)
+        opened = cap.isOpened()
+        has_frames = opened and _camera_produces_frames(cap)
         cap.release()
-        if ok:
-            found[i] = _camera_name(i)
+        if opened:
+            name = _camera_name(i)
+            found[i] = name if has_frames else f"{name} — no signal?"
     if not found:
-        # nothing verified as a real capture device — surface the configured
-        # index anyway so the dropdown isn't empty; opening it will fail
-        # visibly (the existing "Could not open camera" dialog) rather than
-        # silently.
+        # nothing opened at all — surface the configured index anyway so the
+        # dropdown isn't empty; opening it will fail visibly (the existing
+        # "Could not open camera" dialog) rather than silently.
         found[current] = _camera_name(current)
     return sorted(found.items())
 

@@ -136,8 +136,9 @@ Odpreta se **dve okni**:
 - **Nadzorna plošča** (za operaterja, na prenosniku): ime, veliki gumbi,
   stanje, števec potez, števec risb za današnji dan, diagnostični pregled maske.
 
-<!-- ![Nadzorna plošča](docs/images/operator.png) -->
-<!-- ![Platno na TV](docs/images/canvas.gif) -->
+![Nadzorna plošča](docs/images/operator.png)
+
+![Platno na TV](docs/images/canvas.gif)
 
 ---
 
@@ -161,6 +162,7 @@ Potek ene seje:
 | `Ctrl+Z` | razveljavi zadnjo potezo |
 | `Ctrl+S` | shrani in nazaj v mirovanje |
 | `Ctrl+D` | zavrzi |
+| `1`–`9` | izberi barvo poteze iz palete |
 | `F9` | umerjanje |
 | `Esc` | izhod iz celozaslonskega načina (samo razvoj; onemogočeno z `--kiosk`) |
 
@@ -169,11 +171,31 @@ Potek ene seje:
 Poleg prenosnih gumbov (Nova risba / Začni / Ustavi / Nadaljuj / Shrani /
 Zavrzi / Razveljavi / Počisti / Prekliči) ima plošča:
 
+- **Kamera** (spustni seznam) — izbere napravo za zajem. Našteje **vse** kamere,
+  ki jih OpenCV lahko odpre; naprava, ki se je odprla, a ni poslala slike, je
+  označena z »— no signal?« (tak je npr. drugi vozel UVC kamere). Vgrajene
+  kamere prenosnikov se pogosto pojavijo šele tu — če je pravi vnos videti kot
+  »no signal?«, ga vseeno poskusi izbrati. Preklop ne zahteva ponovnega zagona.
 - **Osvetlitev − / +** — hitra prilagoditev osvetlitve **brez** odpiranja
   umerjanja. Skozi dan baterija paličice pojema, LED potemni; z enim klikom
   popraviš, ne da bi izgubil pogled na platno.
 - **Prikaži masko (diagnostika)** — pokaže rdečo/zeleno masko v živo; neprecenljivo
   za sprotno diagnostiko sledenja.
+
+### Barva poteze
+
+Na nadzorni plošči je vrstica barvnih gumbov **Barva (tipke 1-9)**. Klik na gumb
+ali pritisk ustrezne številke `1`–`9` izbere barvo, s katero se rišejo **naslednje
+poteze**. Trenutno odprta poteza obdrži svojo barvo — sprememba velja šele od
+naslednjega poteza naprej. Izbrani gumb je označen.
+
+Barve so nastavljene v `config.json` pod `stroke.palette` (do 9 vrednosti, zapis
+`#rrggbb`); `stroke.color` je barva ob zagonu aplikacije. Izbrana barva ostane
+tudi čez `Ctrl+N` (nova seja) — velja, dokler je operater ne zamenja.
+
+Priporočena raba na prizorišču: operater med risanjem menja barve po dogovoru z
+uporabnikom (npr. »zdaj pritisni gumb, narisal bom obrobo v modri« → operater
+pritisne `7`). Uporabnik palete ne vidi in ne upravlja.
 
 ### Stanja seje
 
@@ -210,7 +232,7 @@ konča sama.
 Ob zaprtju se aplikacija vrne v točno tisto stanje, iz katerega si prišel;
 uporabnikova risba ostane nedotaknjena.
 
-<!-- ![Umerjanje](docs/images/calibration.png) -->
+![Umerjanje](docs/images/calibration.png)
 
 ---
 
@@ -236,7 +258,9 @@ vrednost na prizorišču spremenila.
 | `stroke.start_frames` | koliko zaporednih zelenih zaznav odpre potezo (prepreči pike ob utripu) |
 | `stroke.end_frames` | koliko zaporednih ne-zelenih zaznav zapre potezo (prepreči drobljenje krivulj) |
 | `stroke.max_jump_px` | večji skok od tega = izguba sledenja, poteza se zapre (v pikah platna) |
-| `stroke.width` / `stroke.color` | debelina in barva poteze |
+| `stroke.width` | debelina poteze |
+| `stroke.color` | privzeta barva poteze ob zagonu (`#rrggbb`) |
+| `stroke.palette` | do 9 barv za gumbe / tipke `1`–`9` na nadzorni plošči |
 | `canvas.w` / `canvas.h` | ločljivost platna (neodvisna od TV) |
 | `session.idle_timeout_s` | po tolikšnem mirovanju opozorilo operaterju |
 | `session.attract_fade_s` | čas bledenja »attract« potez v mirovanju |
