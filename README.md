@@ -137,7 +137,7 @@ Odpreta se **dve okni**:
   stanje, števec potez, števec risb za današnji dan, diagnostični pregled maske.
 
 <!-- ![Nadzorna plošča](docs/images/operator.png) -->
-<!-- ![Platno na TV](docs/images/canvas.png) -->
+<!-- ![Platno na TV](docs/images/canvas.gif) -->
 
 ---
 
@@ -313,8 +313,6 @@ python tools/render_gif.py output/2026-09-12/0001_marek/session.json \
     --width 600 --fps 20 --speed 1.5 --hold 1.5
 python tools/render_gif.py --all output/2026-09-12     # cel dan naenkrat
 ```
-
-<!-- ![Primer GIF-a](docs/images/example.gif) -->
 
 ---
 
