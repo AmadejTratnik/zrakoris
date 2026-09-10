@@ -95,6 +95,17 @@ def test_config_roi_aspect_warning():
     assert any("aspect" in w for w in warnings)
 
 
+def test_wants_camera_view_rules():
+    base = copy.deepcopy(configmod.DEFAULTS)
+    assert configmod.wants_camera_view(base) is False              # wand, default
+    torch = copy.deepcopy(base); torch["input"]["mode"] = "torch"
+    assert configmod.wants_camera_view(torch) is True             # torch, default
+    torch["input"]["show_camera"] = False
+    assert configmod.wants_camera_view(torch) is False            # explicit off wins
+    green = copy.deepcopy(base); green["input"]["show_camera"] = True
+    assert configmod.wants_camera_view(green) is True             # wand + mirror
+
+
 def test_config_save_atomic(tmp_path):
     cfg = copy.deepcopy(configmod.DEFAULTS)
     dest = tmp_path / "out.json"

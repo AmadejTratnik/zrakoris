@@ -126,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
 
     input_mode = cfg.get("input", {}).get("mode", "wand")
     torch_mode = input_mode == "torch"
+    show_camera = configmod.wants_camera_view(cfg)
     tracker = TorchTracker(cfg) if torch_mode else WandTracker(cfg)
     capture_thread = CaptureThread(cfg, tracker, video_path=args.video)
     session = SessionController(cfg, tracker)
@@ -142,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         canvas_win.mouse_detection.connect(session.on_detection)
     else:
         capture_thread.detected.connect(session.on_detection, Qt.QueuedConnection)
-        if torch_mode:
+        if show_camera:
             capture_thread.emit_frames = True
             capture_thread.frame_ready.connect(
                 canvas_win.on_camera_frame, Qt.QueuedConnection)

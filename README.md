@@ -65,6 +65,21 @@ Aplikacija podpira dva načina vnosa, izbrana z `input.mode` v `config.json`:
 svetilko telefona, da riše, na TV pa vidi **prekrivanje žive slike kamere in
 polprosojnega platna** — po zrcalni sliki najde položaj telefona in nato riše.
 
+Bliskavica telefona je široka; nalepi čeznjo majhno odprtino iz lepilnega
+traku, da postane pika bolj točkasta (in manj zasiči senzor).
+
+### Zelena bliskavica: `mode: wand` + `show_camera`
+
+Če čez bliskavico nalepiš **zeleno folijo / trak**, telefon sveti zeleno in ga
+lahko zaznamo po **odtenku** namesto po sami svetlosti — enako kot zeleno LED
+paličico. To je robustneje (bela stropna luč, odsev okna ali sonce ne prožijo
+zaznave). Nastavi `input.mode: "wand"` in `input.show_camera: true`: uporabi se
+preizkušen cevovod paličice (in polno umerjanje F9 z drsniki HSV), zraven pa
+dobiš zrcalno sliko. Pripravljen primer: `config.green.json`.
+
+`input.show_camera` (`true` / `false` / brez) preglasi privzetek — zrcalna
+slika je sicer vklopljena v načinu `torch` in izklopljena v načinu `wand`.
+
 Kompromisi načina `torch`:
 
 - Ni stanja »lebdi« — ko je svetilka ugasnjena, kazalca ni; uporabnik se
@@ -152,7 +167,8 @@ zamenjaj kamero. Na Linuxu preveri z `v4l2-ctl -d /dev/video0 --list-ctrls`.
 ```bash
 python main.py                       # običajni zagon (dva zaslona)
 python main.py --config venue.json   # druga datoteka z nastavitvami
-python main.py --config config.wand.json  # način LED paličice (privzeto je torch)
+python main.py --config config.wand.json   # način LED paličice (privzeto je torch)
+python main.py --config config.green.json  # telefon z zeleno folijo + zrcalna slika
 python main.py --no-tv               # razvojni način na enem zaslonu
 python main.py --video posnetek.mp4  # predvajaj posnetek namesto kamere
 python main.py --mouse --no-tv       # miška namesto paličice (za preizkus logike)
@@ -280,7 +296,8 @@ vrednost na prizorišču spremenila.
 | Ključ | Pomen |
 |---|---|
 | `input.mode` | `wand` (LED paličica) ali `torch` (svetilka telefona) |
-| `input.canvas_opacity` | prosojnost platna nad sliko kamere v načinu `torch` (0–1) |
+| `input.show_camera` | `true`/`false`/`null` — zrcalna slika pod platnom; `null` = privzetek (vklop pri `torch`) |
+| `input.canvas_opacity` | prosojnost platna nad sliko kamere, kadar je zrcalna slika vklopljena (0–1) |
 | `torch.v_min` | najnižja svetlost (V) pike, ki še šteje za svetilko (0–255) |
 | `torch.s_max` | najvišja nasičenost (S) — svetilka je skoraj bela, zato nizka |
 | `torch.dilate` | koliko razširi masko svetilke (stabilnejša sredina pike) |

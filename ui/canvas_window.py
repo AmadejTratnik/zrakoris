@@ -18,6 +18,7 @@ from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PyQt5.QtWidgets import QWidget
 
+from core.config import wants_camera_view
 from core.render import new_canvas, paint_segment, render_drawing
 from core.session import State
 from core.strokes import Drawing
@@ -38,10 +39,11 @@ class CanvasWindow(QWidget):
         self.background = c.get("background", "#ffffff")
         self.attract_fade_s = float(cfg["session"]["attract_fade_s"])
 
-        # torch mode: the canvas floats semi-transparent over a mirrored camera
-        # feed so the user positions the phone light by watching themselves.
+        # self-view mirror: the canvas floats semi-transparent over the live
+        # camera feed so the user positions the light by watching themselves.
+        # On for torch mode, or for a green-taped phone (mode: wand + show_camera).
         inp = cfg.get("input", {})
-        self.torch_mode = inp.get("mode") == "torch"
+        self.show_camera = wants_camera_view(cfg)
         self.canvas_opacity = float(inp.get("canvas_opacity", 0.55))
         self._camera_qimg: QImage | None = None
 
@@ -169,7 +171,7 @@ class CanvasWindow(QWidget):
         target = self._canvas_rect()
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
 
-        if self.torch_mode and self._camera_qimg is not None:
+        if self.show_camera and self._camera_qimg is not None:
             # ROI-cropped camera feed fills the same rect the canvas maps onto,
             # so the light in the picture lines up with the stroke it draws.
             roi = self.cfg["roi"]
@@ -208,7 +210,7 @@ class CanvasWindow(QWidget):
         f = QFont()
         f.setPointSize(max(18, self.height() // 24))
         painter.setFont(f)
-        key = "canvas_invitation_torch" if self.torch_mode else "canvas_invitation"
+        key = "canvas_invitation_torch" if self.show_camera else "canvas_invitation"
         painter.drawText(self.rect(), Qt.AlignHCenter | Qt.AlignBottom,
                          tr(key) + "\n")
 
@@ -220,7 +222,7 @@ class CanvasWindow(QWidget):
         if self.tracking_state == "draw":
             painter.setBrush(QColor(self._stroke_color))
             # a light rim keeps the dot readable on top of the camera feed
-            painter.setPen(QPen(QColor("#ffffff"), 2) if self.torch_mode else Qt.NoPen)
+            painter.setPen(QPen(QColor("#ffffff"), 2) if self.show_camera else Qt.NoPen)
             painter.drawEllipse(p, r * 0.6, r * 0.6)
         else:  # hover
             painter.setBrush(Qt.NoBrush)

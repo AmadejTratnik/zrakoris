@@ -36,7 +36,7 @@ DEFAULTS: dict = {
         },
     },
     "blob": {"min_area": 60, "max_area": 8000, "min_circularity": 0.55, "gate_px": 150},
-    "input": {"mode": "wand", "canvas_opacity": 0.55},
+    "input": {"mode": "wand", "canvas_opacity": 0.55, "show_camera": None},
     "torch": {"v_min": 235, "s_max": 90, "dilate": 2},
     "smoothing": {"min_cutoff": 1.0, "beta": 0.01, "d_cutoff": 1.0},
     "stroke": {
@@ -52,6 +52,21 @@ DEFAULTS: dict = {
     "output": {"dir": "./output", "print_enabled": False},
     "ui": {"language": "sl"},
 }
+
+
+def wants_camera_view(cfg: dict) -> bool:
+    """True when the canvas should show a live camera feed under the drawing.
+
+    An explicit ``input.show_camera`` wins; otherwise the mirror is on for torch
+    mode (the user needs to see themselves to aim the phone) and off for the
+    wand. Set ``show_camera: true`` with ``mode: wand`` for a green-taped phone
+    light: hue detection via the wand pipeline, plus the self-view mirror.
+    """
+    inp = cfg.get("input", {})
+    explicit = inp.get("show_camera")
+    if explicit is not None:
+        return bool(explicit)
+    return inp.get("mode", "wand") == "torch"
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
