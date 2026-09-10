@@ -53,8 +53,15 @@ _TR: dict[str, dict[str, str]] = {
         "mask_toggle": "Show mask preview (diagnostic)",
         # canvas
         "canvas_invitation": "Pick up the wand and press the button to draw",
+        "canvas_invitation_torch": "Point your phone light at the screen — "
+                                    "turn the flashlight on to draw",
         # calibration
         "cal_hsv_readout": "HSV at blob",
+        "cal_torch": "Torch (bright spot)",
+        "cal_torch_mask": "torch mask",
+        "cal_v_min": "V min (brightness)",
+        "cal_s_max": "S max (whiteness)",
+        "cal_dilate": "Grow mask",
         "cal_save": "Save to config.json",
         "cal_close": "Close",
         "cal_red": "Red (idle)",
@@ -115,7 +122,14 @@ _TR: dict[str, dict[str, str]] = {
         "idle_banner": "Paličice že nekaj časa ni videti — naj zaključim sejo?",
         "mask_toggle": "Prikaži masko (diagnostika)",
         "canvas_invitation": "Primi paličico in pritisni gumb za risanje",
+        "canvas_invitation_torch": "Usmeri svetilko telefona v zaslon — "
+                                    "prižgi jo za risanje",
         "cal_hsv_readout": "HSV na piki",
+        "cal_torch": "Svetilka (svetla pika)",
+        "cal_torch_mask": "maska svetilke",
+        "cal_v_min": "V min (svetlost)",
+        "cal_s_max": "S max (belina)",
+        "cal_dilate": "Razširi masko",
         "cal_save": "Shrani v config.json",
         "cal_close": "Zapri",
         "cal_red": "Rdeča (mirovanje)",

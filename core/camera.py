@@ -157,9 +157,12 @@ def apply_camera_props(cap: cv2.VideoCapture, cam: dict, *, geometry: bool = Tru
 class CaptureThread(QThread):
     detected = pyqtSignal(object)   # Detection — every frame
     preview = pyqtSignal(object)    # (bgr_frame, Detection) — only while calibrating
+    frame_ready = pyqtSignal(object)  # flipped BGR frame — only in torch mode, throttled
     failed = pyqtSignal(str)
     fps_updated = pyqtSignal(float)
     camera_switch_failed = pyqtSignal(int)   # index that failed to switch to
+
+    FRAME_FPS = 20.0   # cap for frame_ready — the TV background does not need 30
 
     def __init__(self, cfg: dict, tracker: WandTracker,
                  video_path: str | None = None, parent=None) -> None:
@@ -169,6 +172,8 @@ class CaptureThread(QThread):
         self.video_path = video_path
         self._running = False
         self.emit_preview = False
+        self.emit_frames = False        # torch mode: mirror the camera onto the canvas
+        self._last_frame_emit = 0.0
         self._camera_update_pending = False
         self._camera_switch_target: int | None = None
         self._fps_ema = float(cfg["camera"].get("fps", 30))
@@ -269,6 +274,10 @@ class CaptureThread(QThread):
 
             if self.emit_preview:
                 self.preview.emit((frame, det))
+
+            if self.emit_frames and now - self._last_frame_emit >= 1.0 / self.FRAME_FPS:
+                self._last_frame_emit = now
+                self.frame_ready.emit(frame.copy())
 
             # fps meter (EMA)
             dt = now - last_frame_wall

@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
 )
 
 from core import config as configmod
-from core.tracker import IDLE_COLOR, DRAW_COLOR
+from core.tracker import DRAW_COLOR, IDLE_COLOR, TORCH_MASK
 from ui.strings import tr
 
 
@@ -183,6 +183,147 @@ class CalibrationDialog(QDialog):
         self._show(self.view_live, crop, colour=True)
         self._show(self.view_idle, masks[IDLE_COLOR], colour=False)
         self._show(self.view_draw, masks[DRAW_COLOR], colour=False)
+
+        if det is not None and det.raw is not None:
+            hsv = self.tracker.hsv_at(frame, det.raw)
+            if hsv:
+                self.readout.setText(
+                    f"{tr('cal_hsv_readout')}: H={hsv[0]} S={hsv[1]} V={hsv[2]}   "
+                    f"{tr('status_tracking')}={tr('track_' + det.state)}")
+
+    def _show(self, label: QLabel, arr: np.ndarray, colour: bool) -> None:
+        if colour:
+            rgb = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
+            h, w = rgb.shape[:2]
+            img = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
+        else:
+            h, w = arr.shape[:2]
+            img = QImage(arr.data, w, h, w, QImage.Format_Grayscale8)
+        label.setPixmap(QPixmap.fromImage(img.copy()).scaled(
+            label.width(), label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    # ---------------------------------------------------------------- save
+    def _save(self) -> None:
+        self._collect_into_cfg()
+        configmod.save(self.cfg, self.config_path)
+
+    def closeEvent(self, event) -> None:
+        try:
+            self.capture_thread.preview.disconnect(self._on_preview)
+        except TypeError:
+            pass
+        if self._on_closed is not None:
+            self._on_closed()
+        self.session.exit_calibration()
+        super().closeEvent(event)
+
+
+class TorchCalibrationDialog(QDialog):
+    """F9 in torch mode — one bright-spot mask instead of two colour masks.
+
+    Same lifecycle contract as :class:`CalibrationDialog`: it enters the
+    session's CALIBRATING state on open and restores the previous state on
+    close, leaving any in-progress drawing untouched.
+    """
+
+    def __init__(self, cfg: dict, config_path: str, session, capture_thread,
+                 tracker, on_closed=None, parent=None) -> None:
+        super().__init__(parent)
+        self.cfg = cfg
+        self.config_path = config_path
+        self.session = session
+        self.capture_thread = capture_thread
+        self.tracker = tracker
+        self._on_closed = on_closed
+        self._last_det = None
+
+        self.setWindowTitle(tr("title_calibration"))
+        self.setModal(False)
+        self._build_ui()
+
+        session.enter_calibration()
+        capture_thread.emit_preview = True
+        capture_thread.preview.connect(self._on_preview)
+
+    # --------------------------------------------------------------- build
+    def _build_ui(self) -> None:
+        root = QVBoxLayout(self)
+
+        images = QHBoxLayout()
+        self.view_live = QLabel(tr("cal_live"))
+        self.view_mask = QLabel(tr("cal_torch_mask"))
+        for v in (self.view_live, self.view_mask):
+            v.setFixedSize(360, 270)
+            v.setAlignment(Qt.AlignCenter)
+            v.setStyleSheet("background:#111;color:#888;")
+            images.addWidget(v)
+        root.addLayout(images)
+
+        self.readout = QLabel(f"{tr('cal_hsv_readout')}: —")
+        root.addWidget(self.readout)
+
+        box = QGroupBox(tr("cal_torch"))
+        lay = QVBoxLayout(box)
+        cam = self.cfg["camera"]
+        blob = self.cfg["blob"]
+        t = self.cfg.get("torch", {})
+        exp_lo, exp_hi = (-13, 0) if sys.platform.startswith("win") else (1, 2000)
+        cur = int(cam["exposure"])
+        self.sl_v_min = _Slider(tr("cal_v_min"), 0, 255, int(t.get("v_min", 235)),
+                                self._on_slider)
+        self.sl_s_max = _Slider(tr("cal_s_max"), 0, 255, int(t.get("s_max", 90)),
+                                self._on_slider)
+        self.sl_dilate = _Slider(tr("cal_dilate"), 0, 6, int(t.get("dilate", 2)),
+                                 self._on_slider)
+        self.sl_exposure = _Slider(tr("cal_exposure"), min(exp_lo, cur), max(exp_hi, cur),
+                                   cur, self._on_exposure)
+        self.sl_min_area = _Slider(tr("cal_min_area"), 1, 2000,
+                                   int(blob["min_area"]), self._on_slider)
+        self.sl_circ = _Slider(tr("cal_min_circ"), 0, 100,
+                               int(blob["min_circularity"] * 100), self._on_slider)
+        for s in (self.sl_v_min, self.sl_s_max, self.sl_dilate, self.sl_exposure,
+                  self.sl_min_area, self.sl_circ):
+            lay.addWidget(s)
+        root.addWidget(box)
+
+        btns = QHBoxLayout()
+        save_btn = QPushButton(tr("cal_save"))
+        save_btn.clicked.connect(self._save)
+        close_btn = QPushButton(tr("cal_close"))
+        close_btn.clicked.connect(self.close)
+        btns.addStretch(1)
+        btns.addWidget(save_btn)
+        btns.addWidget(close_btn)
+        root.addLayout(btns)
+
+    # -------------------------------------------------------------- update
+    def _collect_into_cfg(self) -> None:
+        self.cfg.setdefault("torch", {})
+        self.cfg["torch"]["v_min"] = self.sl_v_min.value()
+        self.cfg["torch"]["s_max"] = self.sl_s_max.value()
+        self.cfg["torch"]["dilate"] = self.sl_dilate.value()
+        self.cfg["blob"]["min_area"] = self.sl_min_area.value()
+        self.cfg["blob"]["min_circularity"] = self.sl_circ.value() / 100.0
+        self.cfg["camera"]["exposure"] = self.sl_exposure.value()
+
+    def _on_slider(self) -> None:
+        self._collect_into_cfg()
+        self.tracker.configure(self.cfg)
+
+    def _on_exposure(self) -> None:
+        self._collect_into_cfg()
+        self.capture_thread.request_camera_update()
+
+    # -------------------------------------------------------------- preview
+    @pyqtSlot(object)
+    def _on_preview(self, payload) -> None:
+        frame, det = payload
+        self._last_det = det
+        mask = self.tracker.debug_masks(frame)[TORCH_MASK]
+        roi = self.cfg["roi"]
+        crop = frame[roi["y"]:roi["y"] + roi["h"], roi["x"]:roi["x"] + roi["w"]]
+        self._show(self.view_live, crop, colour=True)
+        self._show(self.view_mask, mask, colour=False)
 
         if det is not None and det.raw is not None:
             hsv = self.tracker.hsv_at(frame, det.raw)

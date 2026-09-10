@@ -36,6 +36,8 @@ DEFAULTS: dict = {
         },
     },
     "blob": {"min_area": 60, "max_area": 8000, "min_circularity": 0.55, "gate_px": 150},
+    "input": {"mode": "wand", "canvas_opacity": 0.55},
+    "torch": {"v_min": 235, "s_max": 90, "dilate": 2},
     "smoothing": {"min_cutoff": 1.0, "beta": 0.01, "d_cutoff": 1.0},
     "stroke": {
         "start_frames": 2, "end_frames": 4, "max_jump_px": 150,
@@ -78,6 +80,10 @@ def validate(cfg: dict) -> list[str]:
                 f"ROI aspect ratio {roi_ar:.3f} differs from canvas {canvas_ar:.3f} "
                 f"by more than 2% — circles will render as ovals"
             )
+
+    mode = cfg.get("input", {}).get("mode", "wand")
+    if mode not in ("wand", "torch"):
+        warnings.append(f"input.mode {mode!r} is not 'wand' or 'torch' — falling back to wand")
 
     st = cfg["stroke"]
     if st["start_frames"] < 1:

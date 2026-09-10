@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 
+import cv2
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QFont, QImage, QPainter, QPen
 from PyQt5.QtWidgets import QWidget
@@ -36,6 +37,13 @@ class CanvasWindow(QWidget):
         self.canvas_w, self.canvas_h = int(c["w"]), int(c["h"])
         self.background = c.get("background", "#ffffff")
         self.attract_fade_s = float(cfg["session"]["attract_fade_s"])
+
+        # torch mode: the canvas floats semi-transparent over a mirrored camera
+        # feed so the user positions the phone light by watching themselves.
+        inp = cfg.get("input", {})
+        self.torch_mode = inp.get("mode") == "torch"
+        self.canvas_opacity = float(inp.get("canvas_opacity", 0.55))
+        self._camera_qimg: QImage | None = None
 
         self.image: QImage = new_canvas(self.canvas_w, self.canvas_h, self.background)
         self.session_state = State.IDLE
@@ -113,6 +121,15 @@ class CanvasWindow(QWidget):
         pass
 
     @pyqtSlot(object)
+    def on_camera_frame(self, frame) -> None:
+        """Torch mode: latest mirrored BGR frame to show under the canvas."""
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w = rgb.shape[:2]
+        img = QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888)
+        self._camera_qimg = img.copy()   # detach from the numpy buffer
+        self.update()
+
+    @pyqtSlot(object)
     def on_rerender(self, drawing: Drawing) -> None:
         self.image = render_drawing(drawing)
         self.update()
@@ -151,8 +168,22 @@ class CanvasWindow(QWidget):
         painter.fillRect(self.rect(), QColor(self.background))
         target = self._canvas_rect()
         painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        painter.drawImage(target, self.image,
-                          QRectF(0, 0, self.canvas_w, self.canvas_h))
+
+        if self.torch_mode and self._camera_qimg is not None:
+            # ROI-cropped camera feed fills the same rect the canvas maps onto,
+            # so the light in the picture lines up with the stroke it draws.
+            roi = self.cfg["roi"]
+            painter.fillRect(target, QColor("#000000"))
+            painter.drawImage(
+                target, self._camera_qimg,
+                QRectF(roi["x"], roi["y"], roi["w"], roi["h"]))
+            painter.setOpacity(self.canvas_opacity)
+            painter.drawImage(target, self.image,
+                              QRectF(0, 0, self.canvas_w, self.canvas_h))
+            painter.setOpacity(1.0)
+        else:
+            painter.drawImage(target, self.image,
+                              QRectF(0, 0, self.canvas_w, self.canvas_h))
 
         if self.session_state is State.IDLE:
             self._paint_attract(painter)
@@ -177,8 +208,9 @@ class CanvasWindow(QWidget):
         f = QFont()
         f.setPointSize(max(18, self.height() // 24))
         painter.setFont(f)
+        key = "canvas_invitation_torch" if self.torch_mode else "canvas_invitation"
         painter.drawText(self.rect(), Qt.AlignHCenter | Qt.AlignBottom,
-                         tr("canvas_invitation") + "\n")
+                         tr(key) + "\n")
 
     def _paint_cursor(self, painter: QPainter) -> None:
         if self.cursor_pos is None or self.tracking_state == "lost":
@@ -187,7 +219,8 @@ class CanvasWindow(QWidget):
         r = max(8, self._stroke_width)
         if self.tracking_state == "draw":
             painter.setBrush(QColor(self._stroke_color))
-            painter.setPen(Qt.NoPen)
+            # a light rim keeps the dot readable on top of the camera feed
+            painter.setPen(QPen(QColor("#ffffff"), 2) if self.torch_mode else Qt.NoPen)
             painter.drawEllipse(p, r * 0.6, r * 0.6)
         else:  # hover
             painter.setBrush(Qt.NoBrush)

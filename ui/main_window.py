@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 
 from core.camera import list_camera_devices, nudge_exposure
 from core.session import State
-from core.tracker import IDLE_COLOR, DRAW_COLOR
+from core.tracker import DRAW_COLOR, IDLE_COLOR, TORCH_MASK
 from ui.strings import tr
 
 
@@ -296,9 +296,13 @@ class MainWindow(QMainWindow):
             return
         frame, _det = payload
         masks = self.tracker.debug_masks(frame)
-        combo = np.zeros((*masks[IDLE_COLOR].shape, 3), dtype=np.uint8)
-        combo[..., 2] = masks[IDLE_COLOR]   # red channel
-        combo[..., 1] = masks[DRAW_COLOR]   # green channel
+        if TORCH_MASK in masks:
+            m = masks[TORCH_MASK]
+            combo = np.ascontiguousarray(np.dstack([m, m, m]))  # white spot on black
+        else:
+            combo = np.zeros((*masks[IDLE_COLOR].shape, 3), dtype=np.uint8)
+            combo[..., 2] = masks[IDLE_COLOR]   # red channel
+            combo[..., 1] = masks[DRAW_COLOR]   # green channel
         h, w = combo.shape[:2]
         img = QImage(combo.data, w, h, 3 * w, QImage.Format_BGR888).copy()
         self.mask_label.setPixmap(QPixmap.fromImage(img).scaled(

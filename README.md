@@ -52,6 +52,36 @@ zgladi z **One-Euro filtrom**.
 
 ---
 
+## Način vnosa: paličica ali svetilka telefona
+
+Aplikacija podpira dva načina vnosa, izbrana z `input.mode` v `config.json`:
+
+| `input.mode` | Vnos | Sledenje | Stanje risanja |
+|---|---|---|---|
+| `wand` (privzeto) | LED paličica | dve barvni maski (rdeča/zelena) | zelena LED = gumb držan |
+| `torch` | svetilka (bliskavica) telefona, usmerjena v kamero | ena maska svetle pike (visok V, nizek S) | **svetilka prižgana = riše**, ugasnjena = nič |
+
+**Način `torch`** odpravi potrebo po paličici: uporabnik prižge in ugasne
+svetilko telefona, da riše, na TV pa vidi **prekrivanje žive slike kamere in
+polprosojnega platna** — po zrcalni sliki najde položaj telefona in nato riše.
+
+Kompromisi načina `torch`:
+
+- Ni stanja »lebdi« — ko je svetilka ugasnjena, kazalca ni; uporabnik se
+  orientira po zrcalni sliki sebe.
+- Kamera **ne sme** biti na zelo nizki osvetlitvi (sicer se človeka ne vidi),
+  zato je zaznava manj robustna kot pri paličici — svetilkin odsev v očalih ali
+  oknu je lahko lažna pika. Nastavi `torch.v_min` / `torch.s_max` v umerjanju (F9).
+- Prižiganje/ugašanje svetilke je počasnejše in bolj nerodno od fizičnega
+  gumba na paličici.
+- `roi` mora imeti isto razmerje stranic kot platno (16:9) — sicer se položaj
+  svetilke v zrcalni sliki ne ujema z narisano potezo.
+
+Za privzeto rabo z paličico zaženi z `--config config.wand.json` (ali nastavi
+`input.mode` nazaj na `wand`).
+
+---
+
 ## Oprema
 
 | Kos | Podrobnosti |
@@ -122,6 +152,7 @@ zamenjaj kamero. Na Linuxu preveri z `v4l2-ctl -d /dev/video0 --list-ctrls`.
 ```bash
 python main.py                       # običajni zagon (dva zaslona)
 python main.py --config venue.json   # druga datoteka z nastavitvami
+python main.py --config config.wand.json  # način LED paličice (privzeto je torch)
 python main.py --no-tv               # razvojni način na enem zaslonu
 python main.py --video posnetek.mp4  # predvajaj posnetek namesto kamere
 python main.py --mouse --no-tv       # miška namesto paličice (za preizkus logike)
@@ -219,7 +250,11 @@ konča sama.
 
 ## Umerjanje (F9)
 
-`F9` iz katerega koli stanja. Uporablja se z vrsto uporabnikov, ki medtem čakajo. Vsebuje:
+`F9` iz katerega koli stanja. Uporablja se z vrsto uporabnikov, ki medtem čakajo.
+
+V načinu `torch` je umerjanje drugačno: ena maska svetle pike, drsniki
+`V min` / `S max` / `Razširi masko` / osvetlitev / najm. površina / okroglost.
+V načinu `wand` (spodaj) vsebuje:
 
 - sliko v živo ob obeh binarnih maskah (rdeča, zelena),
 - drsnike H/S/V (spodnja in zgornja meja) za vsako barvo — rdeča ima dva para H
@@ -244,6 +279,11 @@ vrednost na prizorišču spremenila.
 
 | Ključ | Pomen |
 |---|---|
+| `input.mode` | `wand` (LED paličica) ali `torch` (svetilka telefona) |
+| `input.canvas_opacity` | prosojnost platna nad sliko kamere v načinu `torch` (0–1) |
+| `torch.v_min` | najnižja svetlost (V) pike, ki še šteje za svetilko (0–255) |
+| `torch.s_max` | najvišja nasičenost (S) — svetilka je skoraj bela, zato nizka |
+| `torch.dilate` | koliko razširi masko svetilke (stabilnejša sredina pike) |
 | `camera.index` | zaporedna številka kamere (0, 1, …) |
 | `camera.exposure` | osvetlitev; Linux ~1–2000, Windows −6…−10 |
 | `camera.auto_exposure` | 0.25 = »želim ročno« (program prevede za V4L2 v 1) |
@@ -360,6 +400,10 @@ python tools/render_gif.py --all output/2026-09-12     # cel dan naenkrat
 | paličica deluje mrtvo | obe LED hkrati → rumena, zavrnjeno | popravi vezje paličice na strogo »ali-ali« |
 | dolga črta po »Nadaljuj« | poteza ni bila zaprta ob menjavi stanja | (že rešeno v kodi) |
 | shranjena PNG ima piko | kazalec vrisan v sliko | (že rešeno — kazalec se riše le v `paintEvent`) |
+| (torch) človeka se na TV ne vidi | osvetlitev prenizka | zvišaj `camera.exposure` ali daj `camera.auto_exposure` na 0.75 |
+| (torch) riše, ko svetilka ni prižgana | lažna svetla pika (odsev, luč) | zvišaj `torch.v_min`, zniža `torch.s_max`, zoži `roi` |
+| (torch) svetilka prižgana, a ne riše | pika prešibka ali premajhna | zniža `torch.v_min` / `blob.min_area`; približaj telefon kameri |
+| (torch) poteza je zamaknjena od zrcalne slike | `roi` ni v razmerju 16:9 | popravi `roi` |
 
 ---
 
@@ -393,6 +437,12 @@ tests/    pytest za jedro brez Qt + brezglavi test celotne povezave
 
 `core/tracker.py` in `core/filters.py` **ne uvažata Qt** — celoten cevovod se
 lahko razvija in umerja proti posnetku brez kamere in brez vmesnika.
+
+`core/tracker.py` ima skupno jedro `BlobTracker` (izrez ROI, izbira pike,
+glajenje), na njem pa `WandTracker` (dve barvni maski) in `TorchTracker` (ena
+maska svetle pike). Način izbere `main.py` glede na `input.mode`. V načinu
+`torch` `CaptureThread` oddaja tudi zrcaljene sličice (`frame_ready`), ki jih
+`CanvasWindow` izriše pod polprosojnim platnom.
 
 Testi:
 
