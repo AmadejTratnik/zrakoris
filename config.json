@@ -1,21 +1,12 @@
 {
-  "input": {
-    "mode": "torch",
-    "canvas_opacity": 0.55
-  },
   "camera": {
     "index": 0,
     "width": 640,
     "height": 480,
     "fps": 30,
-    "exposure": 40,
+    "exposure": 1,
     "auto_exposure": 0.75,
     "auto_wb": 0
-  },
-  "torch": {
-    "v_min": 235,
-    "s_max": 90,
-    "dilate": 2
   },
   "roi": {
     "x": 40,
@@ -27,22 +18,64 @@
     "idle": {
       "name": "red",
       "ranges": [
-        { "lo": [0, 120, 90], "hi": [8, 255, 255] },
-        { "lo": [172, 120, 90], "hi": [179, 255, 255] }
+        {
+          "lo": [
+            0,
+            120,
+            90
+          ],
+          "hi": [
+            8,
+            255,
+            255
+          ]
+        },
+        {
+          "lo": [
+            172,
+            120,
+            90
+          ],
+          "hi": [
+            179,
+            255,
+            255
+          ]
+        }
       ]
     },
     "draw": {
       "name": "green",
       "ranges": [
-        { "lo": [45, 100, 90], "hi": [80, 255, 255] }
+        {
+          "lo": [
+            45,
+            100,
+            90
+          ],
+          "hi": [
+            80,
+            255,
+            255
+          ]
+        }
       ]
     }
   },
   "blob": {
-    "min_area": 30,
+    "min_area": 2000,
     "max_area": 12000,
-    "min_circularity": 0.0,
+    "min_circularity": 0.67,
     "gate_px": 200
+  },
+  "input": {
+    "mode": "torch",
+    "canvas_opacity": 0.55
+  },
+  "torch": {
+    "v_min": 102,
+    "s_max": 2,
+    "dilate": 1
   },
   "smoothing": {
     "min_cutoff": 1.0,
