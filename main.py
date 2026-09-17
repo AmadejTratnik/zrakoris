@@ -47,8 +47,8 @@ from core import paths
 from core.camera import CaptureThread
 from core.session import SessionController
 from core.storage import SaveWorker
-from core.tracker import WandTracker
-from ui.calibration import CalibrationDialog
+from core.tracker import TorchTracker, WandTracker
+from ui.calibration import CalibrationDialog, TorchCalibrationDialog
 from ui.canvas_window import CanvasWindow
 from ui.main_window import MainWindow
 from ui.strings import set_language, tr
@@ -124,7 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("AirDraw")
 
-    tracker = WandTracker(cfg)
+    input_mode = cfg.get("input", {}).get("mode", "wand")
+    torch_mode = input_mode == "torch"
+    show_camera = configmod.wants_camera_view(cfg)
+    tracker = TorchTracker(cfg) if torch_mode else WandTracker(cfg)
     capture_thread = CaptureThread(cfg, tracker, video_path=args.video)
     session = SessionController(cfg, tracker)
     canvas_win = CanvasWindow(cfg, mouse_input=args.mouse)
@@ -140,6 +143,10 @@ def main(argv: list[str] | None = None) -> int:
         canvas_win.mouse_detection.connect(session.on_detection)
     else:
         capture_thread.detected.connect(session.on_detection, Qt.QueuedConnection)
+        if show_camera:
+            capture_thread.emit_frames = True
+            capture_thread.frame_ready.connect(
+                canvas_win.on_camera_frame, Qt.QueuedConnection)
     session.stroke_extended.connect(canvas_win.on_stroke_extended)
     session.stroke_ended.connect(canvas_win.on_stroke_ended)
     session.rerender.connect(canvas_win.on_rerender)
@@ -161,7 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         if state["dialog"] is not None:
             state["dialog"].raise_()
             return
-        dlg = CalibrationDialog(
+        dlg_cls = TorchCalibrationDialog if torch_mode else CalibrationDialog
+        dlg = dlg_cls(
             cfg, config_path, session, capture_thread, tracker,
             on_closed=lambda: main_win.sync_preview(),
         )

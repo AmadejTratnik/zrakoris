@@ -16,9 +16,11 @@ pytest.importorskip("PyQt5.QtWidgets")
 
 from PyQt5.QtWidgets import QApplication  # noqa: E402
 
+import numpy as np  # noqa: E402
+
 from core import config as configmod  # noqa: E402
 from core.session import SessionController, State  # noqa: E402
-from core.tracker import Detection, WandTracker  # noqa: E402
+from core.tracker import Detection, TorchTracker, WandTracker  # noqa: E402
 from ui.canvas_window import CanvasWindow  # noqa: E402
 
 
@@ -126,6 +128,55 @@ def test_calibration_preserves_drawing(app, cfg):
     session.exit_calibration()
     assert session.state is State.DRAWING
     assert session.drawing.stroke_count == 1  # drawing survived
+
+
+def test_torch_mode_canvas_composites_and_draws(app, tmp_path):
+    cfg = configmod.load(tmp_path / "none.json")
+    cfg["input"]["mode"] = "torch"
+    tracker = TorchTracker(cfg)
+    session = SessionController(cfg, tracker)
+    canvas = CanvasWindow(cfg)
+    session.stroke_extended.connect(canvas.on_stroke_extended)
+    session.state_changed.connect(canvas.on_state_changed)
+    session.cursor_moved.connect(canvas.on_cursor)
+    assert canvas.show_camera
+
+    # a camera frame arrives and is retained for compositing
+    canvas.on_camera_frame(np.full((480, 640, 3), 40, dtype=np.uint8))
+    assert canvas._camera_qimg is not None
+    canvas.resize(960, 540)
+    canvas.grab()                         # forces paintEvent — must not raise
+
+    # torch on/off drives drawing: "draw" records, "lost" (torch off) does not
+    session.new_session()
+    session.start()
+    for i in range(6):
+        session.on_detection(Detection(state="draw", pos=(100 + i, 100), raw=(1, 1)))
+    assert session.drawing.stroke_count == 1
+    for _ in range(6):
+        session.on_detection(Detection(state="lost"))
+    assert session._open_stroke is None
+
+
+def test_green_taped_phone_uses_wand_pipeline_with_mirror(app, tmp_path):
+    """mode: wand + show_camera — hue detection plus the self-view mirror."""
+    cfg = configmod.load(tmp_path / "none.json")
+    cfg["input"]["show_camera"] = True          # mode stays "wand"
+    tracker = WandTracker(cfg)
+    session = SessionController(cfg, tracker)
+    canvas = CanvasWindow(cfg)
+    session.stroke_extended.connect(canvas.on_stroke_extended)
+    session.state_changed.connect(canvas.on_state_changed)
+    assert canvas.show_camera
+
+    canvas.on_camera_frame(np.full((480, 640, 3), 30, dtype=np.uint8))
+    canvas.resize(960, 540)
+    canvas.grab()
+
+    session.new_session(); session.start()
+    for i in range(6):
+        session.on_detection(Detection(state="draw", pos=(200 + i, 200), raw=(1, 1)))
+    assert session.drawing.stroke_count == 1
 
 
 def test_clear_keeps_session(app, cfg):

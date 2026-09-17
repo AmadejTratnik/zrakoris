@@ -1,11 +1,16 @@
 {
+  "input": {
+    "mode": "wand",
+    "show_camera": true,
+    "canvas_opacity": 0.55
+  },
   "camera": {
     "index": 0,
     "width": 640,
     "height": 480,
     "fps": 30,
-    "exposure": 124,
-    "auto_exposure": 0.25,
+    "exposure": 40,
+    "auto_exposure": 0.75,
     "auto_wb": 0
   },
   "roi": {
@@ -18,65 +23,22 @@
     "idle": {
       "name": "red",
       "ranges": [
-        {
-          "lo": [
-            0,
-            120,
-            90
-          ],
-          "hi": [
-            8,
-            255,
-            255
-          ]
-        },
-        {
-          "lo": [
-            172,
-            120,
-            90
-          ],
-          "hi": [
-            179,
-            255,
-            255
-          ]
-        }
+        { "lo": [0, 150, 120], "hi": [8, 255, 255] },
+        { "lo": [172, 150, 120], "hi": [179, 255, 255] }
       ]
     },
     "draw": {
       "name": "green",
       "ranges": [
-        {
-          "lo": [
-            10,
-            100,
-            90
-          ],
-          "hi": [
-            170,
-            255,
-            255
-          ]
-        }
+        { "lo": [40, 60, 140], "hi": [90, 255, 255] }
       ]
     }
   },
   "blob": {
-    "min_area": 1,
-    "max_area": 8000,
+    "min_area": 40,
+    "max_area": 12000,
     "min_circularity": 0.0,
-    "gate_px": 150
-  },
-  "input": {
-    "mode": "wand",
-    "canvas_opacity": 0.55,
-    "show_camera": null
-  },
-  "torch": {
-    "v_min": 235,
-    "s_max": 90,
-    "dilate": 2
+    "gate_px": 200
   },
   "smoothing": {
     "min_cutoff": 1.0,
@@ -86,7 +48,7 @@
   "stroke": {
     "start_frames": 2,
     "end_frames": 4,
-    "max_jump_px": 150,
+    "max_jump_px": 180,
     "width": 10,
     "color": "#1a1a1a",
     "palette": [

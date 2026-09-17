@@ -15,7 +15,9 @@ import pytest
 from core import config as configmod
 from core.filters import OneEuroFilter, PointFilter
 from core.strokes import Drawing, Stroke
-from core.tracker import STATE_DRAW, STATE_HOVER, STATE_LOST, WandTracker
+from core.tracker import (
+    STATE_DRAW, STATE_HOVER, STATE_LOST, TORCH_MASK, TorchTracker, WandTracker,
+)
 
 
 # --------------------------------------------------------------------- filters
@@ -91,6 +93,17 @@ def test_config_roi_aspect_warning():
     cfg["roi"] = {"x": 0, "y": 0, "w": 400, "h": 400}  # 1:1 vs 16:9 canvas
     warnings = configmod.validate(cfg)
     assert any("aspect" in w for w in warnings)
+
+
+def test_wants_camera_view_rules():
+    base = copy.deepcopy(configmod.DEFAULTS)
+    assert configmod.wants_camera_view(base) is False              # wand, default
+    torch = copy.deepcopy(base); torch["input"]["mode"] = "torch"
+    assert configmod.wants_camera_view(torch) is True             # torch, default
+    torch["input"]["show_camera"] = False
+    assert configmod.wants_camera_view(torch) is False            # explicit off wins
+    green = copy.deepcopy(base); green["input"]["show_camera"] = True
+    assert configmod.wants_camera_view(green) is True             # wand + mirror
 
 
 def test_config_save_atomic(tmp_path):
@@ -176,3 +189,39 @@ def test_tracker_circularity_rejects_line(cfg):
     cv2.rectangle(frame, (50, 150), (400, 158), (0, 255, 0), -1)  # thin bar
     det = t.process(frame, 0.0)
     assert det.state == STATE_LOST
+
+
+# --------------------------------------------------------------- torch tracker
+def test_torch_bright_spot_is_draw(cfg):
+    t = TorchTracker(cfg)
+    det = t.process(_frame_with_blob((255, 255, 255), (200, 150)), 0.0)
+    assert det.state == STATE_DRAW
+    assert det.pos == pytest.approx((600, 450), abs=10)  # (200,150) ROI, x3 scale
+
+
+def test_torch_lost_when_torch_off(cfg):
+    t = TorchTracker(cfg)
+    det = t.process(np.zeros((480, 640, 3), np.uint8), 0.0)
+    assert det.state == STATE_LOST
+    assert det.pos is None
+
+
+def test_torch_ignores_saturated_colour(cfg):
+    """A bright but colourful blob (red shirt, green LED) is not a white torch."""
+    t = TorchTracker(cfg)
+    det = t.process(_frame_with_blob((0, 0, 255), (200, 150)), 0.0)
+    assert det.state == STATE_LOST
+
+
+def test_torch_never_reports_hover(cfg):
+    t = TorchTracker(cfg)
+    for _ in range(3):
+        det = t.process(np.zeros((480, 640, 3), np.uint8), 0.0)
+    assert det.state in (STATE_DRAW, STATE_LOST)
+
+
+def test_torch_debug_mask_key(cfg):
+    t = TorchTracker(cfg)
+    masks = t.debug_masks(_frame_with_blob((255, 255, 255), (100, 100)))
+    assert TORCH_MASK in masks
+    assert masks[TORCH_MASK].max() == 255

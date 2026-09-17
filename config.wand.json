@@ -1,10 +1,10 @@
 {
   "camera": {
-    "index": 0,
+    "index": 1,
     "width": 640,
     "height": 480,
     "fps": 30,
-    "exposure": 124,
+    "exposure": 3,
     "auto_exposure": 0.25,
     "auto_wb": 0
   },
@@ -67,16 +67,6 @@
     "max_area": 8000,
     "min_circularity": 0.0,
     "gate_px": 150
-  },
-  "input": {
-    "mode": "wand",
-    "canvas_opacity": 0.55,
-    "show_camera": null
-  },
-  "torch": {
-    "v_min": 235,
-    "s_max": 90,
-    "dilate": 2
   },
   "smoothing": {
     "min_cutoff": 1.0,

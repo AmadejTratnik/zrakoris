@@ -1,11 +1,16 @@
-"""WandTracker — the vision pipeline. Pure OpenCV + numpy, imports no Qt.
+"""Vision pipelines. Pure OpenCV + numpy, imports no Qt.
+
+Two trackers share one blob-selection core (:class:`BlobTracker`):
+
+* :class:`WandTracker` — the LED wand. Two colour masks (red = hover, green =
+  draw). This is what ``main.py`` uses unless ``input.mode`` says otherwise.
+* :class:`TorchTracker` — a phone camera light. One "is there a bright spot?"
+  mask; the torch being on *is* the draw signal, off means lost. No hover.
 
 Input:  a BGR frame (already flipped horizontally by the capture thread) and a
         monotonic timestamp in seconds.
 Output: a :class:`Detection` with the cursor already mapped to canvas coords and
         already smoothed, so consumers never deal with the ROI.
-
-The nine stages are documented inline. See AIRDRAW_SPEC.md section 5.
 """
 
 from __future__ import annotations
@@ -52,8 +57,13 @@ def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-class WandTracker:
-    """Stateful single-wand tracker. Not thread-safe; own it from one thread."""
+class BlobTracker:
+    """Shared ROI cropping, blob selection and smoothing.
+
+    Subclasses implement :meth:`process` (turn a frame into a Detection) and
+    :meth:`debug_masks` (binary masks for the calibration overlay). Not
+    thread-safe; own it from one thread.
+    """
 
     def __init__(self, cfg: dict) -> None:
         self._kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
@@ -76,9 +86,6 @@ class WandTracker:
         canvas = cfg["canvas"]
         self.canvas_w, self.canvas_h = int(canvas["w"]), int(canvas["h"])
 
-        self.idle_spec = _ColorSpec.from_config(cfg["colors"]["idle"])
-        self.draw_spec = _ColorSpec.from_config(cfg["colors"]["draw"])
-
         s = cfg["smoothing"]
         self._filter = PointFilter(
             freq=float(cfg["camera"].get("fps", 30)),
@@ -92,30 +99,6 @@ class WandTracker:
         self.last_pos: tuple[float, float] | None = None
         self._filter.reset()
 
-    # ------------------------------------------------------------- main entry
-    def process(self, frame: np.ndarray, timestamp: float) -> Detection:
-        masks = self._masks(frame)
-        green = self._best_blob(masks[DRAW_COLOR], self.last_pos)
-        red = self._best_blob(masks[IDLE_COLOR], self.last_pos)
-
-        # Green wins over red: committing to "drawing" is the right failure mode.
-        if green is not None:
-            blob, state = green, STATE_DRAW
-        elif red is not None:
-            blob, state = red, STATE_HOVER
-        else:
-            blob, state = None, STATE_LOST
-
-        if blob is None:
-            self.reset()
-            return Detection(state=STATE_LOST)
-
-        raw, area = blob
-        self.last_pos = raw
-        smoothed_roi = self._filter(raw, timestamp)
-        canvas_pos = self._to_canvas(smoothed_roi)
-        return Detection(state=state, pos=canvas_pos, raw=raw, area=area)
-
     # -------------------------------------------------------------- internals
     def _roi_slice(self, frame: np.ndarray) -> np.ndarray:
         h, w = frame.shape[:2]
@@ -125,30 +108,26 @@ class WandTracker:
         y1 = max(y0 + 1, min(self.roi_y + self.roi_h, h))
         return frame[y0:y1, x0:x1]
 
-    def _masks(self, frame: np.ndarray) -> dict[str, np.ndarray]:
-        roi = self._roi_slice(frame)                       # stage 2: crop
-        roi = cv2.GaussianBlur(roi, (5, 5), 0)             # stage 3: blur
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)         # stage 4: BGR->HSV
-        return {
-            IDLE_COLOR: self._color_mask(hsv, self.idle_spec),
-            DRAW_COLOR: self._color_mask(hsv, self.draw_spec),
-        }
+    def _prep_hsv(self, frame: np.ndarray) -> np.ndarray:
+        roi = self._roi_slice(frame)                       # crop
+        roi = cv2.GaussianBlur(roi, (5, 5), 0)             # blur
+        return cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)        # BGR -> HSV
 
     def _color_mask(self, hsv: np.ndarray, spec: _ColorSpec) -> np.ndarray:
         mask = None
-        for lo, hi in spec.ranges:                         # stage 5: threshold
+        for lo, hi in spec.ranges:                         # threshold
             part = cv2.inRange(hsv, lo, hi)
             mask = part if mask is None else cv2.bitwise_or(mask, part)
         if mask is None:
             return np.zeros(hsv.shape[:2], dtype=np.uint8)
-        return cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)  # stage 6
+        return cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
 
     def _best_blob(
         self, mask: np.ndarray, last_pos: tuple[float, float] | None
     ) -> tuple[tuple[float, float], float] | None:
         cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cands: list[tuple[tuple[float, float], float]] = []
-        for c in cnts:                                     # stage 7: candidates
+        for c in cnts:                                     # candidates
             area = cv2.contourArea(c)
             if not (self.min_area < area < self.max_area):
                 continue
@@ -163,7 +142,7 @@ class WandTracker:
             (x, y), _r = cv2.minEnclosingCircle(c)
             cands.append(((float(x), float(y)), float(area)))
 
-        if not cands:                                      # stage 8: select
+        if not cands:                                      # select
             return None
         if last_pos is None:
             return max(cands, key=lambda b: b[1])          # cold start: largest
@@ -177,11 +156,15 @@ class WandTracker:
         sy = self.canvas_h / self.roi_h
         return (p[0] * sx, p[1] * sy)
 
-    # ------------------------------------------------------ calibration helper
-    def debug_masks(self, frame: np.ndarray) -> dict[str, np.ndarray]:
-        """Return the two binary masks for the calibration overlay."""
-        return self._masks(frame)
+    def _accept(self, blob, timestamp: float, state: str) -> Detection:
+        """Common tail: record last_pos, smooth, map to canvas."""
+        raw, area = blob
+        self.last_pos = raw
+        smoothed_roi = self._filter(raw, timestamp)
+        return Detection(state=state, pos=self._to_canvas(smoothed_roi),
+                         raw=raw, area=area)
 
+    # ------------------------------------------------------ calibration helper
     def hsv_at(self, frame: np.ndarray, roi_pt: tuple[float, float]) -> tuple[int, int, int] | None:
         """HSV value at a point in ROI coords — for the calibration readout."""
         roi = self._roi_slice(frame)
@@ -191,3 +174,80 @@ class WandTracker:
             h, s, v = hsv[y, x]
             return int(h), int(s), int(v)
         return None
+
+
+class WandTracker(BlobTracker):
+    """Stateful single-wand tracker: red = hover, green = draw."""
+
+    def configure(self, cfg: dict) -> None:
+        super().configure(cfg)
+        self.idle_spec = _ColorSpec.from_config(cfg["colors"]["idle"])
+        self.draw_spec = _ColorSpec.from_config(cfg["colors"]["draw"])
+
+    # ------------------------------------------------------------- main entry
+    def process(self, frame: np.ndarray, timestamp: float) -> Detection:
+        masks = self._masks(frame)
+        green = self._best_blob(masks[DRAW_COLOR], self.last_pos)
+        red = self._best_blob(masks[IDLE_COLOR], self.last_pos)
+
+        # Green wins over red: committing to "drawing" is the right failure mode.
+        if green is not None:
+            blob, state = green, STATE_DRAW
+        elif red is not None:
+            blob, state = red, STATE_HOVER
+        else:
+            self.reset()
+            return Detection(state=STATE_LOST)
+
+        return self._accept(blob, timestamp, state)
+
+    def _masks(self, frame: np.ndarray) -> dict[str, np.ndarray]:
+        hsv = self._prep_hsv(frame)
+        return {
+            IDLE_COLOR: self._color_mask(hsv, self.idle_spec),
+            DRAW_COLOR: self._color_mask(hsv, self.draw_spec),
+        }
+
+    def debug_masks(self, frame: np.ndarray) -> dict[str, np.ndarray]:
+        """Return the two binary masks for the calibration overlay."""
+        return self._masks(frame)
+
+
+TORCH_MASK = "torch"
+
+
+class TorchTracker(BlobTracker):
+    """Single bright-spot tracker for a phone camera light.
+
+    The torch is a near-white highlight: very high V, low S. There is no hover
+    state — a spot present means "draw", absent means "lost". The operator's
+    ``start``/``stop`` and the user's torch button are the only gates.
+    """
+
+    def configure(self, cfg: dict) -> None:
+        super().configure(cfg)
+        t = cfg.get("torch", {})
+        self.v_min = int(t.get("v_min", 235))
+        self.s_max = int(t.get("s_max", 90))
+        self.dilate = int(t.get("dilate", 2))
+
+    # ------------------------------------------------------------- main entry
+    def process(self, frame: np.ndarray, timestamp: float) -> Detection:
+        blob = self._best_blob(self._mask(frame), self.last_pos)
+        if blob is None:
+            self.reset()
+            return Detection(state=STATE_LOST)
+        return self._accept(blob, timestamp, STATE_DRAW)
+
+    def _mask(self, frame: np.ndarray) -> np.ndarray:
+        hsv = self._prep_hsv(frame)
+        lo = np.array([0, 0, self.v_min], dtype=np.uint8)
+        hi = np.array([179, self.s_max, 255], dtype=np.uint8)
+        mask = cv2.inRange(hsv, lo, hi)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self._kernel)
+        if self.dilate > 0:
+            mask = cv2.dilate(mask, self._kernel, iterations=self.dilate)
+        return mask
+
+    def debug_masks(self, frame: np.ndarray) -> dict[str, np.ndarray]:
+        return {TORCH_MASK: self._mask(frame)}

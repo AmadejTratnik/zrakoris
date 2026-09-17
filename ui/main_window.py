@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (
 
 from core.camera import list_camera_devices, nudge_exposure
 from core.session import State
-from core.tracker import IDLE_COLOR, DRAW_COLOR
+from core.tracker import DRAW_COLOR, IDLE_COLOR, TORCH_MASK
 from ui.strings import tr
 
 
@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
         self.capture_thread.preview.connect(self._on_preview)
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         self.capture_thread.camera_switch_failed.connect(self._on_camera_switch_failed)
+        self.capture_thread.camera_switched.connect(self._on_camera_switched)
         self.session.color_changed.connect(self._on_color_changed)
         if getattr(self.capture_thread, "video_path", None):
             for b in (self.btn_exp_down, self.btn_exp_up):
@@ -255,6 +256,16 @@ class MainWindow(QMainWindow):
         # once the new device has proven it can deliver frames.
         self.capture_thread.request_camera_switch(int(device_index))
 
+    def _on_camera_switched(self, index: int) -> None:
+        # keep the dropdown in sync when the capture thread auto-picks a
+        # different camera than config.json at startup (the configured index
+        # didn't deliver frames, so it fell back to a working one)
+        current = self.camera_combo.findData(int(index))
+        if current >= 0:
+            self.camera_combo.blockSignals(True)
+            self.camera_combo.setCurrentIndex(current)
+            self.camera_combo.blockSignals(False)
+
     def _on_camera_switch_failed(self, index: int) -> None:
         # revert the dropdown to whatever camera is actually still running
         current = self.camera_combo.findData(int(self.cfg["camera"]["index"]))
@@ -296,9 +307,13 @@ class MainWindow(QMainWindow):
             return
         frame, _det = payload
         masks = self.tracker.debug_masks(frame)
-        combo = np.zeros((*masks[IDLE_COLOR].shape, 3), dtype=np.uint8)
-        combo[..., 2] = masks[IDLE_COLOR]   # red channel
-        combo[..., 1] = masks[DRAW_COLOR]   # green channel
+        if TORCH_MASK in masks:
+            m = masks[TORCH_MASK]
+            combo = np.ascontiguousarray(np.dstack([m, m, m]))  # white spot on black
+        else:
+            combo = np.zeros((*masks[IDLE_COLOR].shape, 3), dtype=np.uint8)
+            combo[..., 2] = masks[IDLE_COLOR]   # red channel
+            combo[..., 1] = masks[DRAW_COLOR]   # green channel
         h, w = combo.shape[:2]
         img = QImage(combo.data, w, h, 3 * w, QImage.Format_BGR888).copy()
         self.mask_label.setPixmap(QPixmap.fromImage(img).scaled(
