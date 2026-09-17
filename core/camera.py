@@ -161,6 +161,7 @@ class CaptureThread(QThread):
     failed = pyqtSignal(str)
     fps_updated = pyqtSignal(float)
     camera_switch_failed = pyqtSignal(int)   # index that failed to switch to
+    camera_switched = pyqtSignal(int)        # index actually opened (may differ from config)
 
     FRAME_FPS = 20.0   # cap for frame_ready — the TV background does not need 30
 
@@ -231,15 +232,47 @@ class CaptureThread(QThread):
             return
         apply_camera_props(cap, self.cfg["camera"], geometry=False)
 
+    def _open_camera_with_fallback(self, max_probe: int = 8) -> cv2.VideoCapture | None:
+        """Open the configured camera; if it won't deliver frames, try the
+        other detected indices instead of leaving the operator with a dead app
+        and a config value they have to go hand-edit.
+
+        Only this *initial* open auto-falls-back — an explicit dropdown pick
+        (:meth:`_switch_camera`) never silently redirects to a different
+        device once the app is running.
+        """
+        cap = self._open_camera()
+        if cap is not None or self.video_path:
+            return cap
+
+        original = self.cfg["camera"]["index"]
+        tried = {int(original)}
+        for index in _candidate_indices(max_probe):
+            if index in tried:
+                continue
+            tried.add(index)
+            log.warning("configured camera index %s unavailable — probing index %s",
+                        original, index)
+            self.cfg["camera"]["index"] = index
+            cap = self._open_camera()
+            if cap is not None:
+                log.warning("auto-selected camera index %s (configured index %s did not work)",
+                            index, original)
+                return cap
+        self.cfg["camera"]["index"] = original
+        return None
+
     # ------------------------------------------------------------------ loop
     def run(self) -> None:
         self._running = True
         # A bad *default* camera doesn't end the thread — it stays alive with
         # no device open so the operator can still pick a working one from
         # the panel's dropdown instead of hand-editing config.json + restart.
-        self._cap = self._open_camera()
+        self._cap = self._open_camera_with_fallback()
         if self._cap is None:
             self.failed.emit("Could not open camera")
+        else:
+            self.camera_switched.emit(int(self.cfg["camera"]["index"]))
 
         target_dt = 1.0 / max(float(self.cfg["camera"].get("fps", 30)), 1.0)
         last_frame_wall = time.monotonic()

@@ -92,8 +92,8 @@ Kompromisi načina `torch`:
 - `roi` mora imeti isto razmerje stranic kot platno (16:9) — sicer se položaj
   svetilke v zrcalni sliki ne ujema z narisano potezo.
 
-Za privzeto rabo z paličico zaženi z `--config config.wand.json` (ali nastavi
-`input.mode` nazaj na `wand`).
+Paličica (`wand`) je privzeta. Za preizkus svetilke telefona zaženi z
+`--config config.torch.json` (ali nastavi `input.mode` na `torch`).
 
 ---
 
@@ -167,7 +167,7 @@ zamenjaj kamero. Na Linuxu preveri z `v4l2-ctl -d /dev/video0 --list-ctrls`.
 ```bash
 python main.py                       # običajni zagon (dva zaslona)
 python main.py --config venue.json   # druga datoteka z nastavitvami
-python main.py --config config.wand.json   # način LED paličice (privzeto je torch)
+python main.py --config config.torch.json  # način svetilke telefona
 python main.py --config config.green.json  # telefon z zeleno folijo + zrcalna slika
 python main.py --no-tv               # razvojni način na enem zaslonu
 python main.py --video posnetek.mp4  # predvajaj posnetek namesto kamere
@@ -223,6 +223,9 @@ Zavrzi / Razveljavi / Počisti / Prekliči) ima plošča:
   označena z »— no signal?« (tak je npr. drugi vozel UVC kamere). Vgrajene
   kamere prenosnikov se pogosto pojavijo šele tu — če je pravi vnos videti kot
   »no signal?«, ga vseeno poskusi izbrati. Preklop ne zahteva ponovnega zagona.
+  Če `camera.index` iz `config.json` ob zagonu ne obstaja ali ne pošlje slike,
+  se aplikacija **sama** preklopi na prvo kamero, ki deluje (dropdown se
+  samodejno posodobi) — namesto da bi samo javila napako.
 - **Osvetlitev − / +** — hitra prilagoditev osvetlitve **brez** odpiranja
   umerjanja. Skozi dan baterija paličice pojema, LED potemni; z enim klikom
   popraviš, ne da bi izgubil pogled na platno.
@@ -403,6 +406,8 @@ python tools/render_gif.py --all output/2026-09-12     # cel dan naenkrat
 |---|---|---|
 | LED se vidi kot bela, odtenek nesmiseln | previsoka osvetlitev | zniža `camera.exposure`; **ne** nižaj praga S |
 | sprememba osvetlitve nima učinka | kamera ignorira nastavitve | Windows: uporabi `CAP_DSHOW`; Linux: `v4l2-ctl --list-ctrls`; zamenjaj kamero |
+| ob zagonu javi »Kamere ni mogoče odpreti« | tudi po samodejnem preklopu ni delujoče kamere | preveri, da je kamera priklopljena; izberi drugo iz spustnega seznama (Kamera) |
+| ob zagonu se sama preklopi na drugo kamero od tiste v `config.json` | konfigurirani `camera.index` ne obstaja ali ne pošlje slike | pričakovano (samodejni preklop); po potrebi izberi pravo v spustnem seznamu in shrani prek F9 |
 | kazalec vse bolj zaostaja | kopičenje slik v medpomnilniku | `cap.set(CAP_PROP_BUFFERSIZE, 1)` (že v kodi) |
 | stalna zakasnitev ~150 ms | obdelava slike na TV | vklopi igralni način na TV |
 | risba je zrcaljena | manjka zrcaljenje | `cv2.flip(frame, 1)` v niti zajema (že v kodi) |

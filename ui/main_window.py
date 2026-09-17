@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
         self.capture_thread.preview.connect(self._on_preview)
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         self.capture_thread.camera_switch_failed.connect(self._on_camera_switch_failed)
+        self.capture_thread.camera_switched.connect(self._on_camera_switched)
         self.session.color_changed.connect(self._on_color_changed)
         if getattr(self.capture_thread, "video_path", None):
             for b in (self.btn_exp_down, self.btn_exp_up):
@@ -254,6 +255,16 @@ class MainWindow(QMainWindow):
         # cfg["camera"]["index"] is updated by the capture thread itself, only
         # once the new device has proven it can deliver frames.
         self.capture_thread.request_camera_switch(int(device_index))
+
+    def _on_camera_switched(self, index: int) -> None:
+        # keep the dropdown in sync when the capture thread auto-picks a
+        # different camera than config.json at startup (the configured index
+        # didn't deliver frames, so it fell back to a working one)
+        current = self.camera_combo.findData(int(index))
+        if current >= 0:
+            self.camera_combo.blockSignals(True)
+            self.camera_combo.setCurrentIndex(current)
+            self.camera_combo.blockSignals(False)
 
     def _on_camera_switch_failed(self, index: int) -> None:
         # revert the dropdown to whatever camera is actually still running

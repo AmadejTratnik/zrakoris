@@ -4,8 +4,8 @@
     "width": 640,
     "height": 480,
     "fps": 30,
-    "exposure": 1,
-    "auto_exposure": 0.75,
+    "exposure": 124,
+    "auto_exposure": 0.25,
     "auto_wb": 0
   },
   "roi": {
@@ -49,12 +49,12 @@
       "ranges": [
         {
           "lo": [
-            45,
+            10,
             100,
             90
           ],
           "hi": [
-            80,
+            170,
             255,
             255
           ]
@@ -63,19 +63,20 @@
     }
   },
   "blob": {
-    "min_area": 2000,
-    "max_area": 12000,
-    "min_circularity": 0.67,
-    "gate_px": 200
+    "min_area": 1,
+    "max_area": 8000,
+    "min_circularity": 0.0,
+    "gate_px": 150
   },
   "input": {
-    "mode": "torch",
-    "canvas_opacity": 0.55
+    "mode": "wand",
+    "canvas_opacity": 0.55,
+    "show_camera": null
   },
   "torch": {
-    "v_min": 102,
-    "s_max": 2,
-    "dilate": 1
+    "v_min": 235,
+    "s_max": 90,
+    "dilate": 2
   },
   "smoothing": {
     "min_cutoff": 1.0,
@@ -85,7 +86,7 @@
   "stroke": {
     "start_frames": 2,
     "end_frames": 4,
-    "max_jump_px": 180,
+    "max_jump_px": 150,
     "width": 10,
     "color": "#1a1a1a",
     "palette": [
